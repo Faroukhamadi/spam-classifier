@@ -1,5 +1,5 @@
-data/easy_ham
-data/easy_ham_2
-data/hard_ham
-data/spam
-data/spam_2
+server/data/easy_ham
+server/data/easy_ham_2
+server/data/hard_ham
+server/data/spam
+server/data/spam_2
