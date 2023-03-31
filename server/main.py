@@ -1,4 +1,5 @@
 import os
+import joblib
 import numpy as np
 import email
 import re
@@ -44,9 +45,11 @@ class EmailTransformer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, x):
-        x_out = np.empty((x.shape), dtype=x.dtype)
+        x_out = np.empty((x.shape), dtype='object')
         for i, e in enumerate(x):
             msg = email.message_from_string(e)
+
+            payload = msg.get_payload()
 
             if self.strip_headers:
                 for k in msg.keys():
@@ -116,58 +119,81 @@ class EmailStemmer(BaseEstimator, TransformerMixin):
 
 def main():
 
-    x_spam, x_ham = load_data()
-    y_spam = np.ones(x_spam.shape)
-    y_ham = np.zeros(x_ham.shape)
+    model_path = 'gb_model.joblib'
 
-    x = np.concatenate([x_spam, x_ham])
-    y = np.concatenate([y_spam, y_ham])
+    if os.path.isfile(model_path):
 
-    sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+        x_spam, x_ham = load_data()
+        y_spam = np.ones(x_spam.shape)
+        y_ham = np.zeros(x_ham.shape)
 
-    for train_index, test_index in sss.split(x, y):
-        x_train, x_test = x[train_index], x[test_index]
-        y_train, y_test = y[train_index], y[test_index]
+        x = np.concatenate([x_spam, x_ham])
+        y = np.concatenate([y_spam, y_ham])
+        gb = joblib.load(model_path)
+        pipeline = make_pipeline(EmailTransformer(), EmailReplacer(
+            replace_number=True, replace_url=True), EmailStemmer(), verbose=3)
 
-    pipeline = make_pipeline(EmailTransformer(), EmailReplacer(
-        replace_number=True, replace_url=True), EmailStemmer(), verbose=3)
+        x_tr = pipeline.fit_transform(x)
 
-    x_tr = pipeline.fit_transform(x)
+        vectorizer = CountVectorizer(encoding='ISO-8859-1')
+        vectorizer.fit(x_tr)
 
-    vectorizer = CountVectorizer(encoding='ISO-8859-1')
-    vectorizer.fit(x_tr)
+    else:
+        x_spam, x_ham = load_data()
+        y_spam = np.ones(x_spam.shape)
+        y_ham = np.zeros(x_ham.shape)
 
-    x_train_tr = pipeline.transform(x_train)
-    x_test_tr = pipeline.transform(x_test)
+        x = np.concatenate([x_spam, x_ham])
+        y = np.concatenate([y_spam, y_ham])
 
-    x_train_tr = vectorizer.transform(x_train_tr)
-    x_test_tr = vectorizer.transform(x_test_tr)
+        sss = StratifiedShuffleSplit(
+            n_splits=1, test_size=0.2, random_state=42)
 
-    gb = GradientBoostingClassifier()
-    gb.fit(x_train_tr, y_train)
+        for train_index, test_index in sss.split(x, y):
+            x_train, x_test = x[train_index], x[test_index]
+            y_train, _ = y[train_index], y[test_index]
+
+        pipeline = make_pipeline(EmailTransformer(), EmailReplacer(
+            replace_number=True, replace_url=True), EmailStemmer(), verbose=3)
+
+        x_tr = pipeline.fit_transform(x)
+
+        vectorizer = CountVectorizer(encoding='ISO-8859-1')
+        vectorizer.fit(x_tr)
+
+        x_train_tr = pipeline.transform(x_train)
+        x_test_tr = pipeline.transform(x_test)
+
+        x_train_tr = vectorizer.transform(x_train_tr)
+        x_test_tr = vectorizer.transform(x_test_tr)
+
+        gb = GradientBoostingClassifier()
+        gb.fit(x_train_tr, y_train)
+        joblib.dump(gb, model_path)
 
     # make a web server using flask and use the model to predict the spam or ham
     # and return the result to the user
     app = Flask(__name__)
 
-    @app.route('/')
+    @ app.route('/')
     # get the input from the user and return the result using the model to predict in json format
     # dont render the template or any html file
     def index():
         return render_template('index.html')
 
-    @app.route('/predict', methods=['POST'])
+    @ app.route('/predict', methods=['POST'])
     def predict():
-        print('request received')
         if request.method == 'POST':
-            print('request is post')
             message = request.form['message']
-            print('message is: ', message)
-            data = np.array([message])
+            message = f'"{message}"'
+
+            data = np.array([message], dtype='object')
+
             data_tr = pipeline.transform(data)
+
             data_tr = vectorizer.transform(data_tr)
+
             my_prediction = gb.predict(data_tr)
-            print(my_prediction)
 
             return jsonify({'prediction': my_prediction[0]})
 
