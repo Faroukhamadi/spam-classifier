@@ -14,6 +14,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from nltk.stem.snowball import SnowballStemmer
 
 from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 
 
 def load_data():
@@ -174,6 +175,7 @@ def main():
     # make a web server using flask and use the model to predict the spam or ham
     # and return the result to the user
     app = Flask(__name__)
+    CORS(app)
 
     @ app.route('/')
     # get the input from the user and return the result using the model to predict in json format
@@ -181,11 +183,15 @@ def main():
     def index():
         return render_template('index.html')
 
-    @ app.route('/predict', methods=['POST'])
+    @app.route('/predict', methods=['POST'])
     def predict():
         if request.method == 'POST':
-            message = request.form['message']
+            # get the message from the request body instead of form
+            message = request.get_json(force=True)
+            message = message['message']
             message = f'"{message}"'
+
+            # message = request.form['message']
 
             data = np.array([message], dtype='object')
 
@@ -194,8 +200,9 @@ def main():
             data_tr = vectorizer.transform(data_tr)
 
             my_prediction = gb.predict(data_tr)
-
-            return jsonify({'prediction': my_prediction[0]})
+            response = jsonify({'prediction': my_prediction[0]})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response
 
     return app
 

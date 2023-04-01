@@ -5,3 +5,21 @@ This is a simple example of how to use Gradient Boosting to classify spam emails
 ## Running the web server
 
 flask --app server/main.py run
+
+## Server Dependencies
+
+Just figure them out yourself. I'm not your mother.
+
+## Running the web app
+
+```npm install```
+
+```npm run dev```
+
+## Web App Dependencies
+
+* [Solid](https://www.solidjs.com/)
+
+## License
+
+MIT
